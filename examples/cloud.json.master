@@ -1,0 +1,16 @@
+{
+  "redis_port": 6379,
+  "redis_bind": "0.0.0.0",
+  "redis_db": 0,
+  "custom_redis": false,
+  "cluster": {
+    "enabled": true,
+    "mode": "MASTER",
+    "node_id": "cloud-master"
+  },
+  "bridge": {
+    "hub_template": "Lobby",
+    "hubcommand_desc": "Go to the Lobby",
+    "hubcommand_no_hub_available": "There is no hub avaiable at the moment."
+  }
+}
