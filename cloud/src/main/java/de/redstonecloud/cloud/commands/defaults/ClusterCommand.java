@@ -77,22 +77,22 @@ public class ClusterCommand extends Command {
         }
 
         System.out.println("\nTemplates for slave node: " + nodeId);
-        System.out.println("+---------------------+---------+------------+------------+");
-        System.out.println("| Template            | Type    | Min/Max    | Players    |");
-        System.out.println("+---------------------+---------+------------+------------+");
+        System.out.println("+---------------------+------------+------------+------------+");
+        System.out.println("| Template            | Type       | Min/Max    | Players    |");
+        System.out.println("+---------------------+------------+------------+------------+");
 
         for (String templateName : templateNames) {
             Template template = sm.getSlaveTemplate(nodeId, templateName);
             if (template != null) {
-                System.out.format("| %-19s | %-7s | %-3d/%-6d | %-10d |%n",
+                System.out.format("| %-19s | %-10s | %-3d/%-6d | %-10d |%n",
                     template.getName(),
-                    template.getType().getName(),
+                    template.getType().name(),
                     template.getMinServers(),
                     template.getMaxServers(),
                     template.getMaxPlayers());
             }
         }
-        System.out.println("+---------------------+---------+------------+------------+");
+        System.out.println("+---------------------+------------+------------+------------+");
     }
 
     private void showAllTemplates() {
@@ -110,18 +110,18 @@ public class ClusterCommand extends Command {
             List<Template> templates = entry.getValue();
 
             System.out.println("\n[" + nodeId + "] - " + templates.size() + " templates");
-            System.out.println("+---------------------+---------+------------+");
-            System.out.println("| Template            | Type    | Min/Max    |");
-            System.out.println("+---------------------+---------+------------+");
+            System.out.println("+---------------------+------------+------------+");
+            System.out.println("| Template            | Type       | Min/Max    |");
+            System.out.println("+---------------------+------------+------------+");
 
             for (Template template : templates) {
-                System.out.format("| %-19s | %-7s | %-3d/%-6d |%n",
+                System.out.format("| %-19s | %-10s | %-3d/%-6d |%n",
                     template.getName(),
-                    template.getType().getName(),
+                    template.getType().name(),
                     template.getMinServers(),
                     template.getMaxServers());
             }
-            System.out.println("+---------------------+---------+------------+");
+            System.out.println("+---------------------+------------+------------+");
         }
     }
 }

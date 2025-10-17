@@ -74,6 +74,7 @@ The master node manages all server lifecycle operations, starts/stops servers, a
 - Can start internal Redis instance if `custom_redis` is `false`
 - Full administrative capabilities
 - **Discovers and queries templates from all slave nodes**
+- **Can start servers using slave templates** - just use `start <template>` with any slave template name
 - Use `cluster` command to view slave templates and node information
 
 ### Slave Node
@@ -100,10 +101,14 @@ Slave nodes connect to the same Redis instance and have read-only access. They c
 - Read-only access to server data
 - Cannot create or stop servers
 - Shares Redis with master for synchronization
-- **Each slave stores its own templates in Redis** with keys: `template:{nodeId}:{templateName}`
+- **Each slave stores its own templates AND server types in Redis**
+  - Templates: `template:{nodeId}:{templateName}`
+  - Types: `type:{nodeId}:{typeName}`
 - Automatically registers with master on startup
 - Master can discover and query slave templates
+- **Master can start servers using slave templates**
 - Multiple slave instances can run simultaneously
+- Types with same names on different nodes don't conflict
 - Multiple slave instances can run simultaneously
 
 ## Architecture
@@ -189,15 +194,42 @@ Registered Slave Nodes:
 +-----------------------+------------+
 ```
 
+## Starting Servers from Slave Templates (Master Only)
+
+The master can start servers using templates from any slave node. Simply use the `start` command with the template name:
+
+```bash
+# Start a server from a slave template
+start SlaveTemplateName
+
+# Start multiple servers
+start SlaveTemplateName --amount 3
+
+# Start with specific ID
+start SlaveTemplateName --id 5
+```
+
+The master will:
+1. Automatically detect if the template is from a slave node
+2. Load the template and its server type from Redis
+3. Create and manage the server just like a local template
+
+**Note:** The server is created and managed by the master, not the slave. The slave only provides the template configuration.
+
 ## Template Storage
 
-In cluster mode, each slave stores its templates in Redis with the following key pattern:
+In cluster mode, each slave stores its templates AND server types in Redis with the following key patterns:
 ```
 template:{nodeId}:{templateName}
+type:{nodeId}:{typeName}
 ```
 
 For example:
 - `template:cloud-slave-1:Lobby`
+- `type:cloud-slave-1:Proxy`
 - `template:cloud-slave-2:GameServer`
+- `type:cloud-slave-2:Server`
 
-This allows the master to discover and query templates from all slave nodes dynamically. Slaves automatically register their templates with the master on startup.
+This allows the master to discover and query templates from all slave nodes dynamically, and ensures that server types with the same name on different nodes don't conflict. Slaves automatically register their templates with the master on startup.
+
+**Master can start servers from slave templates:** The master node can use the `start` command with any template from any slave node. The server will be created and managed by the master, even if the template comes from a slave.

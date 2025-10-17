@@ -21,7 +21,8 @@ public class StartCommand extends Command {
             return;
         }
 
-        Template template = RedstoneCloud.getInstance().getServerManager().getTemplate(args[0]);
+        // Check both local and slave templates (for MASTER mode)
+        Template template = RedstoneCloud.getInstance().getServerManager().getTemplateIncludingSlaves(args[0]);
         if (template == null) {
             log.error("Template not found.");
             return;
@@ -57,6 +58,7 @@ public class StartCommand extends Command {
 
     @Override
     public String[] getArgs() {
-        return getServer().getServerManager().getTemplates().keySet().toArray(EmptyArrays.STRING);
+        // Include both local and slave templates for tab completion
+        return getServer().getServerManager().getAllTemplateNamesIncludingSlaves().toArray(EmptyArrays.STRING);
     }
 }
