@@ -63,8 +63,8 @@ public class RedstoneCloud {
         System.setProperty(Keys.PROPERTY_REDIS_IP, redisCfg.ip());
         System.setProperty(Keys.PROPERTY_REDIS_DB, String.valueOf(redisCfg.db()));
 
-        // Only start internal Redis if not using custom Redis AND (standalone mode OR master mode)
-        if(redisCfg.useInternal() && (!clusterConfig.enabled() || clusterConfig.mode() == ClusterMode.MASTER)) {
+        // Only start internal Redis if not using custom Redis AND (not in cluster mode OR master/standalone cluster mode)
+        if(redisCfg.useInternal() && (!clusterConfig.enabled() || clusterConfig.mode() == ClusterMode.MASTER || clusterConfig.mode() == ClusterMode.STANDALONE)) {
             redisInstance = new RedisInstance();
         }
 
