@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import de.redstonecloud.api.components.ServerStatus;
 import de.redstonecloud.cloud.RedstoneCloud;
+import de.redstonecloud.cloud.config.entry.ClusterMode;
 import de.redstonecloud.cloud.events.defaults.ServerCreateEvent;
 import de.redstonecloud.cloud.events.defaults.ServerStartEvent;
 import de.redstonecloud.cloud.utils.Directories;
@@ -261,6 +262,13 @@ public class ServerManager {
             return null;
         }
 
+        // Check cluster mode - only STANDALONE and MASTER can create servers
+        if (RedstoneCloud.getClusterConfig().enabled() && 
+            RedstoneCloud.getClusterConfig().mode() == ClusterMode.SLAVE) {
+            log.error("Cannot start server in SLAVE cluster mode. Only MASTER can manage servers.");
+            return null;
+        }
+
         log.info("Creating server from template: {}", template.getName());
 
         // Build server instance
@@ -312,6 +320,13 @@ public class ServerManager {
      * @return true if all servers stopped successfully
      */
     public boolean stopAll() {
+        // Check cluster mode - only STANDALONE and MASTER can stop servers
+        if (RedstoneCloud.getClusterConfig().enabled() && 
+            RedstoneCloud.getClusterConfig().mode() == ClusterMode.SLAVE) {
+            log.warn("Cannot stop servers in SLAVE cluster mode. Only MASTER can manage servers.");
+            return true;
+        }
+
         if (servers.isEmpty()) {
             log.info("No servers to stop");
             return true;
@@ -445,5 +460,17 @@ public class ServerManager {
      * @param freeSlots number of available player slots
      */
     public record BestServerResult(Server server, int freeSlots) {
+    }
+
+    /**
+     * Checks if this instance can manage servers (create, start, stop).
+     * Only STANDALONE and MASTER modes can manage servers.
+     *
+     * @return true if server management is allowed
+     */
+    public boolean canManageServers() {
+        return !RedstoneCloud.getClusterConfig().enabled() || 
+               RedstoneCloud.getClusterConfig().mode() == ClusterMode.STANDALONE ||
+               RedstoneCloud.getClusterConfig().mode() == ClusterMode.MASTER;
     }
 }
