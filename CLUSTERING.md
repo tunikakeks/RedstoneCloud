@@ -14,7 +14,7 @@ The clustering feature allows you to run multiple RedstoneCloud instances that s
 
 ## Configuration
 
-Edit `cloud.json` to configure clustering:
+Edit `cloud.json` to configure clustering. See the `examples/` directory for ready-to-use configuration templates.
 
 ```json
 {
@@ -33,6 +33,8 @@ Edit `cloud.json` to configure clustering:
 - **node_id**: Unique identifier for this cluster node (default: `cloud-1`)
 
 ## Usage Examples
+
+For ready-to-use configuration files, see the `examples/` directory. Below are the configuration details for each mode.
 
 ### Standalone Mode (Default)
 
@@ -146,3 +148,11 @@ If you're upgrading from a non-clustered setup, no changes are needed. The defau
 ```
 
 This maintains full backwards compatibility.
+
+## Quick Start
+
+See `examples/README.md` for:
+- Ready-to-use configuration files
+- Deployment scenarios (single server, same-machine cluster, multi-machine cluster)
+- Security considerations
+- Troubleshooting tips
