@@ -73,6 +73,8 @@ The master node manages all server lifecycle operations, starts/stops servers, a
 - Template management
 - Can start internal Redis instance if `custom_redis` is `false`
 - Full administrative capabilities
+- **Discovers and queries templates from all slave nodes**
+- Use `cluster` command to view slave templates and node information
 
 ### Slave Node
 
@@ -98,6 +100,10 @@ Slave nodes connect to the same Redis instance and have read-only access. They c
 - Read-only access to server data
 - Cannot create or stop servers
 - Shares Redis with master for synchronization
+- **Each slave stores its own templates in Redis** with keys: `template:{nodeId}:{templateName}`
+- Automatically registers with master on startup
+- Master can discover and query slave templates
+- Multiple slave instances can run simultaneously
 - Multiple slave instances can run simultaneously
 
 ## Architecture
@@ -156,3 +162,42 @@ See `examples/README.md` for:
 - Deployment scenarios (single server, same-machine cluster, multi-machine cluster)
 - Security considerations
 - Troubleshooting tips
+
+## Cluster Command (Master Only)
+
+The master node can use the `cluster` command to view information about slave nodes and their templates:
+
+```bash
+# List all registered slave nodes
+cluster list
+
+# View templates for a specific slave node
+cluster templates cloud-slave-1
+
+# View all templates from all slave nodes
+cluster all
+```
+
+Example output:
+```
+Registered Slave Nodes:
++-----------------------+------------+
+| Node ID               | Templates  |
++-----------------------+------------+
+| cloud-slave-1         | 3          |
+| cloud-slave-2         | 2          |
++-----------------------+------------+
+```
+
+## Template Storage
+
+In cluster mode, each slave stores its templates in Redis with the following key pattern:
+```
+template:{nodeId}:{templateName}
+```
+
+For example:
+- `template:cloud-slave-1:Lobby`
+- `template:cloud-slave-2:GameServer`
+
+This allows the master to discover and query templates from all slave nodes dynamically. Slaves automatically register their templates with the master on startup.

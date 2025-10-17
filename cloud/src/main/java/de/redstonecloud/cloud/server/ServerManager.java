@@ -62,6 +62,13 @@ public class ServerManager {
         log.info("Initializing ServerManager");
         loadServerTypes();
         loadTemplates();
+        
+        // Store templates in Redis if in SLAVE mode
+        if (RedstoneCloud.getClusterConfig().enabled() && 
+            RedstoneCloud.getClusterConfig().mode() == ClusterMode.SLAVE) {
+            storeTemplatesToRedis();
+        }
+        
         log.info("ServerManager initialized with {} types and {} templates",
                 types.size(), templates.size());
     }
@@ -472,5 +479,66 @@ public class ServerManager {
         return !RedstoneCloud.getClusterConfig().enabled() || 
                RedstoneCloud.getClusterConfig().mode() == ClusterMode.STANDALONE ||
                RedstoneCloud.getClusterConfig().mode() == ClusterMode.MASTER;
+    }
+
+    /**
+     * Store all templates to Redis (for SLAVE mode).
+     */
+    private void storeTemplatesToRedis() {
+        String nodeId = RedstoneCloud.getClusterConfig().nodeId();
+        for (Template template : templates.values()) {
+            TemplateRegistry.storeTemplate(nodeId, template);
+        }
+        log.info("Stored {} templates to Redis for node {}", templates.size(), nodeId);
+    }
+
+    /**
+     * Get all slave node IDs that have templates registered.
+     */
+    public Set<String> getSlaveNodeIds() {
+        Set<String> allNodeIds = TemplateRegistry.getAllNodeIds();
+        String currentNodeId = RedstoneCloud.getClusterConfig().nodeId();
+        allNodeIds.remove(currentNodeId); // Remove current node
+        return allNodeIds;
+    }
+
+    /**
+     * Get template names for a specific slave node.
+     */
+    public List<String> getSlaveTemplateNames(String nodeId) {
+        return TemplateRegistry.getTemplateNames(nodeId);
+    }
+
+    /**
+     * Load a specific template from a slave node.
+     */
+    public Template getSlaveTemplate(String nodeId, String templateName) {
+        return TemplateRegistry.loadTemplate(nodeId, templateName);
+    }
+
+    /**
+     * Get all templates from all slave nodes (for MASTER mode).
+     */
+    public Map<String, List<Template>> getAllSlaveTemplates() {
+        Map<String, List<Template>> slaveTemplates = new HashMap<>();
+        Set<String> slaveNodes = getSlaveNodeIds();
+        
+        for (String nodeId : slaveNodes) {
+            List<String> templateNames = getSlaveTemplateNames(nodeId);
+            List<Template> templates = new ArrayList<>();
+            
+            for (String templateName : templateNames) {
+                Template template = getSlaveTemplate(nodeId, templateName);
+                if (template != null) {
+                    templates.add(template);
+                }
+            }
+            
+            if (!templates.isEmpty()) {
+                slaveTemplates.put(nodeId, templates);
+            }
+        }
+        
+        return slaveTemplates;
     }
 }

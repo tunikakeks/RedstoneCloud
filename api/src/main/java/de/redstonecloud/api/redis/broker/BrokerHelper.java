@@ -1,5 +1,8 @@
 package de.redstonecloud.api.redis.broker;
 
+import de.redstonecloud.api.redis.broker.packet.defaults.cluster.RegisterSlavePacket;
+import de.redstonecloud.api.redis.broker.packet.defaults.cluster.RequestSlaveTemplatesPacket;
+import de.redstonecloud.api.redis.broker.packet.defaults.cluster.SlaveTemplateUpdatePacket;
 import de.redstonecloud.api.redis.broker.packet.defaults.communication.ClientAuthPacket;
 import de.redstonecloud.api.redis.broker.packet.defaults.player.PlayerConnectPacket;
 import de.redstonecloud.api.redis.broker.packet.defaults.player.PlayerDisconnectPacket;
@@ -41,6 +44,10 @@ public class BrokerHelper {
             registry.register(RemoveServerPacket.NETWORK_ID, RemoveServerPacket::new);
             registry.register(ServerActionPacket.NETWORK_ID, ServerActionPacket::new);
             registry.register(ServerChangeStatusPacket.NETWORK_ID, ServerChangeStatusPacket::new);
+
+            registry.register(RegisterSlavePacket.NETWORK_ID, RegisterSlavePacket::new);
+            registry.register(SlaveTemplateUpdatePacket.NETWORK_ID, SlaveTemplateUpdatePacket::new);
+            registry.register(RequestSlaveTemplatesPacket.NETWORK_ID, RequestSlaveTemplatesPacket::new);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

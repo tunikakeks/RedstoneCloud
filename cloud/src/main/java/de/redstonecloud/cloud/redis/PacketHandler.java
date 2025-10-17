@@ -3,6 +3,9 @@ package de.redstonecloud.cloud.redis;
 import com.google.common.net.HostAndPort;
 import de.redstonecloud.api.components.ServerStatus;
 import de.redstonecloud.api.redis.broker.packet.Packet;
+import de.redstonecloud.api.redis.broker.packet.defaults.cluster.RegisterSlavePacket;
+import de.redstonecloud.api.redis.broker.packet.defaults.cluster.RequestSlaveTemplatesPacket;
+import de.redstonecloud.api.redis.broker.packet.defaults.cluster.SlaveTemplateUpdatePacket;
 import de.redstonecloud.api.redis.broker.packet.defaults.communication.ClientAuthPacket;
 import de.redstonecloud.api.redis.broker.packet.defaults.player.PlayerConnectPacket;
 import de.redstonecloud.api.redis.broker.packet.defaults.player.PlayerDisconnectPacket;
@@ -12,6 +15,7 @@ import de.redstonecloud.api.redis.broker.packet.defaults.template.GetBestTemplat
 import de.redstonecloud.api.redis.broker.packet.defaults.template.ServerStartedPacket;
 import de.redstonecloud.api.redis.broker.packet.defaults.template.StartServerPacket;
 import de.redstonecloud.cloud.RedstoneCloud;
+import de.redstonecloud.cloud.config.entry.ClusterMode;
 import de.redstonecloud.cloud.events.defaults.PlayerConnectEvent;
 import de.redstonecloud.cloud.events.defaults.PlayerDisconnectEvent;
 import de.redstonecloud.cloud.events.defaults.PlayerTransferEvent;
@@ -37,6 +41,9 @@ public class PacketHandler {
             case ServerChangeStatusPacket pk -> on(pk);
             case GetBestTemplatePacket pk -> on(pk);
             case StartServerPacket pk -> on(pk);
+            case RegisterSlavePacket pk -> on(pk);
+            case SlaveTemplateUpdatePacket pk -> on(pk);
+            case RequestSlaveTemplatesPacket pk -> on(pk);
             default -> {
             }
         }
@@ -127,5 +134,62 @@ public class PacketHandler {
                 .setTo(packet.getFrom())
                 .setSessionId(packet.getSessionId())
                 .send();
+    }
+
+    private static void on(RegisterSlavePacket packet) {
+        // Only MASTER nodes should handle slave registration
+        if (!RedstoneCloud.getClusterConfig().enabled() || 
+            RedstoneCloud.getClusterConfig().mode() != ClusterMode.MASTER) {
+            return;
+        }
+
+        log.info("Slave node {} registered with {} templates", 
+                 packet.getNodeId(), packet.getTemplateNames().size());
+        
+        // Templates are already in Redis, just log the registration
+        for (String templateName : packet.getTemplateNames()) {
+            log.debug("  - Template: {}", templateName);
+        }
+    }
+
+    private static void on(SlaveTemplateUpdatePacket packet) {
+        // Only MASTER nodes should handle template updates
+        if (!RedstoneCloud.getClusterConfig().enabled() || 
+            RedstoneCloud.getClusterConfig().mode() != ClusterMode.MASTER) {
+            return;
+        }
+
+        log.info("Slave node {} {} template: {}", 
+                 packet.getNodeId(), packet.getAction(), packet.getTemplateName());
+        
+        // Template is already updated in Redis by the slave
+        // Master just needs to be aware of the change
+    }
+
+    private static void on(RequestSlaveTemplatesPacket packet) {
+        // Only SLAVE nodes should respond to template requests
+        if (!RedstoneCloud.getClusterConfig().enabled() || 
+            RedstoneCloud.getClusterConfig().mode() != ClusterMode.SLAVE) {
+            return;
+        }
+
+        String currentNodeId = RedstoneCloud.getClusterConfig().nodeId();
+        if (!currentNodeId.equals(packet.getTargetNodeId())) {
+            return; // Not for this slave
+        }
+
+        // Send template list to master
+        ServerManager sm = ServerManager.getInstance();
+        java.util.List<String> templateNames = new java.util.ArrayList<>();
+        for (Template template : sm.getTemplates().values()) {
+            templateNames.add(template.getName());
+        }
+
+        new RegisterSlavePacket(currentNodeId, templateNames)
+                .setTo(packet.getFrom())
+                .setSessionId(packet.getSessionId())
+                .send();
+        
+        log.info("Sent template list ({} templates) to master", templateNames.size());
     }
 }

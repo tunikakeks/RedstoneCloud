@@ -19,6 +19,7 @@ import de.redstonecloud.cloud.console.Console;
 import de.redstonecloud.cloud.scheduler.TaskScheduler;
 import de.redstonecloud.cloud.scheduler.defaults.CheckTemplateTask;
 import de.redstonecloud.cloud.server.ServerManager;
+import de.redstonecloud.cloud.server.Template;
 import de.redstonecloud.cloud.utils.Directories;
 import de.redstonecloud.cloud.utils.Translator;
 import de.redstonecloud.cloud.utils.Utils;
@@ -31,6 +32,7 @@ import lombok.extern.log4j.Log4j2;
 
 import java.security.PublicKey;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 @Getter
 @Log4j2
@@ -152,7 +154,30 @@ public class RedstoneCloud {
             this.scheduler.scheduleRepeatingTask(new CheckTemplateTask(), 3000L);
         }
 
+        // If SLAVE mode, register with master after initialization
+        if (clusterConfig.enabled() && clusterConfig.mode() == ClusterMode.SLAVE) {
+            this.scheduler.scheduleDelayedTask(() -> registerSlaveWithMaster(), TimeUnit.SECONDS, 2);
+        }
+
         this.pluginManager.enableAllPlugins();
+    }
+
+    /**
+     * Slave node registers itself with the master and announces its templates.
+     */
+    private void registerSlaveWithMaster() {
+        String nodeId = clusterConfig.nodeId();
+        java.util.List<String> templateNames = new java.util.ArrayList<>();
+        
+        for (Template template : this.serverManager.getTemplates().values()) {
+            templateNames.add(template.getName());
+        }
+
+        new de.redstonecloud.api.redis.broker.packet.defaults.cluster.RegisterSlavePacket(nodeId, templateNames)
+                .setTo("cloud")
+                .send();
+        
+        log.info("Registered slave node {} with {} templates to master", nodeId, templateNames.size());
     }
 
     public void stop() {
