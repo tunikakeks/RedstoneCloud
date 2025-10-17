@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import de.redstonecloud.api.components.ServerStatus;
 import de.redstonecloud.cloud.RedstoneCloud;
+import de.redstonecloud.cloud.config.entry.ClusterMode;
 import de.redstonecloud.cloud.events.defaults.ServerCreateEvent;
 import de.redstonecloud.cloud.events.defaults.ServerStartEvent;
 import de.redstonecloud.cloud.utils.Directories;
@@ -61,6 +62,13 @@ public class ServerManager {
         log.info("Initializing ServerManager");
         loadServerTypes();
         loadTemplates();
+        
+        // Store templates in Redis if in SLAVE mode
+        if (RedstoneCloud.getClusterConfig().enabled() && 
+            RedstoneCloud.getClusterConfig().mode() == ClusterMode.SLAVE) {
+            storeTemplatesToRedis();
+        }
+        
         log.info("ServerManager initialized with {} types and {} templates",
                 types.size(), templates.size());
     }
@@ -261,6 +269,13 @@ public class ServerManager {
             return null;
         }
 
+        // Check cluster mode - only STANDALONE and MASTER can create servers
+        if (RedstoneCloud.getClusterConfig().enabled() && 
+            RedstoneCloud.getClusterConfig().mode() == ClusterMode.SLAVE) {
+            log.error("Cannot start server in SLAVE cluster mode. Only MASTER can manage servers.");
+            return null;
+        }
+
         log.info("Creating server from template: {}", template.getName());
 
         // Build server instance
@@ -312,6 +327,13 @@ public class ServerManager {
      * @return true if all servers stopped successfully
      */
     public boolean stopAll() {
+        // Check cluster mode - only STANDALONE and MASTER can stop servers
+        if (RedstoneCloud.getClusterConfig().enabled() && 
+            RedstoneCloud.getClusterConfig().mode() == ClusterMode.SLAVE) {
+            log.warn("Cannot stop servers in SLAVE cluster mode. Only MASTER can manage servers.");
+            return true;
+        }
+
         if (servers.isEmpty()) {
             log.info("No servers to stop");
             return true;
@@ -445,5 +467,138 @@ public class ServerManager {
      * @param freeSlots number of available player slots
      */
     public record BestServerResult(Server server, int freeSlots) {
+    }
+
+    /**
+     * Checks if this instance can manage servers (create, start, stop).
+     * Only STANDALONE and MASTER modes can manage servers.
+     *
+     * @return true if server management is allowed
+     */
+    public boolean canManageServers() {
+        return !RedstoneCloud.getClusterConfig().enabled() || 
+               RedstoneCloud.getClusterConfig().mode() == ClusterMode.STANDALONE ||
+               RedstoneCloud.getClusterConfig().mode() == ClusterMode.MASTER;
+    }
+
+    /**
+     * Store all templates to Redis (for SLAVE mode).
+     */
+    private void storeTemplatesToRedis() {
+        String nodeId = RedstoneCloud.getClusterConfig().nodeId();
+        
+        // Store server types first
+        for (ServerType type : types.values()) {
+            TemplateRegistry.storeServerType(nodeId, type);
+        }
+        
+        // Then store templates
+        for (Template template : templates.values()) {
+            TemplateRegistry.storeTemplate(nodeId, template);
+        }
+        
+        log.info("Stored {} types and {} templates to Redis for node {}", 
+                 types.size(), templates.size(), nodeId);
+    }
+
+    /**
+     * Get all slave node IDs that have templates registered.
+     */
+    public Set<String> getSlaveNodeIds() {
+        Set<String> allNodeIds = TemplateRegistry.getAllNodeIds();
+        String currentNodeId = RedstoneCloud.getClusterConfig().nodeId();
+        allNodeIds.remove(currentNodeId); // Remove current node
+        return allNodeIds;
+    }
+
+    /**
+     * Get template names for a specific slave node.
+     */
+    public List<String> getSlaveTemplateNames(String nodeId) {
+        return TemplateRegistry.getTemplateNames(nodeId);
+    }
+
+    /**
+     * Load a specific template from a slave node.
+     */
+    public Template getSlaveTemplate(String nodeId, String templateName) {
+        return TemplateRegistry.loadTemplate(nodeId, templateName);
+    }
+
+    /**
+     * Get a template by name, checking both local templates and slave templates.
+     * For MASTER mode, this allows starting servers from slave templates.
+     */
+    public Template getTemplateIncludingSlaves(String templateName) {
+        // First check local templates
+        Template template = templates.get(templateName);
+        if (template != null) {
+            return template;
+        }
+        
+        // If in MASTER mode, check slave templates
+        if (RedstoneCloud.getClusterConfig().enabled() && 
+            RedstoneCloud.getClusterConfig().mode() == ClusterMode.MASTER) {
+            
+            // Search all slave nodes for this template
+            Set<String> slaveNodes = getSlaveNodeIds();
+            for (String nodeId : slaveNodes) {
+                List<String> slaveTemplateNames = getSlaveTemplateNames(nodeId);
+                if (slaveTemplateNames.contains(templateName)) {
+                    Template slaveTemplate = getSlaveTemplate(nodeId, templateName);
+                    if (slaveTemplate != null) {
+                        log.debug("Found template {} on slave node {}", templateName, nodeId);
+                        return slaveTemplate;
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Get all template names including slave templates (for MASTER mode).
+     */
+    public Set<String> getAllTemplateNamesIncludingSlaves() {
+        Set<String> allNames = new HashSet<>(templates.keySet());
+        
+        // If in MASTER mode, include slave templates
+        if (RedstoneCloud.getClusterConfig().enabled() && 
+            RedstoneCloud.getClusterConfig().mode() == ClusterMode.MASTER) {
+            
+            Set<String> slaveNodes = getSlaveNodeIds();
+            for (String nodeId : slaveNodes) {
+                allNames.addAll(getSlaveTemplateNames(nodeId));
+            }
+        }
+        
+        return allNames;
+    }
+
+    /**
+     * Get all templates from all slave nodes (for MASTER mode).
+     */
+    public Map<String, List<Template>> getAllSlaveTemplates() {
+        Map<String, List<Template>> slaveTemplates = new HashMap<>();
+        Set<String> slaveNodes = getSlaveNodeIds();
+        
+        for (String nodeId : slaveNodes) {
+            List<String> templateNames = getSlaveTemplateNames(nodeId);
+            List<Template> templates = new ArrayList<>();
+            
+            for (String templateName : templateNames) {
+                Template template = getSlaveTemplate(nodeId, templateName);
+                if (template != null) {
+                    templates.add(template);
+                }
+            }
+            
+            if (!templates.isEmpty()) {
+                slaveTemplates.put(nodeId, templates);
+            }
+        }
+        
+        return slaveTemplates;
     }
 }

@@ -5,6 +5,8 @@ import de.redstonecloud.api.encryption.cache.KeyCache;
 import de.redstonecloud.api.redis.broker.BrokerHelper;
 import de.redstonecloud.api.util.Keys;
 import de.redstonecloud.cloud.config.CloudConfig;
+import de.redstonecloud.cloud.config.entry.ClusterEntry;
+import de.redstonecloud.cloud.config.entry.ClusterMode;
 import de.redstonecloud.cloud.config.entry.RedisEntry;
 import de.redstonecloud.cloud.events.EventManager;
 import de.redstonecloud.cloud.player.PlayerManager;
@@ -17,6 +19,7 @@ import de.redstonecloud.cloud.console.Console;
 import de.redstonecloud.cloud.scheduler.TaskScheduler;
 import de.redstonecloud.cloud.scheduler.defaults.CheckTemplateTask;
 import de.redstonecloud.cloud.server.ServerManager;
+import de.redstonecloud.cloud.server.Template;
 import de.redstonecloud.cloud.utils.Directories;
 import de.redstonecloud.cloud.utils.Translator;
 import de.redstonecloud.cloud.utils.Utils;
@@ -29,6 +32,7 @@ import lombok.extern.log4j.Log4j2;
 
 import java.security.PublicKey;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 @Getter
 @Log4j2
@@ -42,6 +46,8 @@ public class RedstoneCloud {
     private static RedisInstance redisInstance;
     @Getter
     private static boolean running = false;
+    @Getter
+    private static ClusterEntry clusterConfig;
 
 
     @Getter private static Broker broker;
@@ -53,12 +59,14 @@ public class RedstoneCloud {
         if (!Directories.setupCheck.exists()) Utils.setup();
 
         RedisEntry redisCfg = CloudConfig.getRedis();
+        clusterConfig = CloudConfig.getCluster();
 
         System.setProperty(Keys.PROPERTY_REDIS_PORT, redisCfg.port());
         System.setProperty(Keys.PROPERTY_REDIS_IP, redisCfg.ip());
         System.setProperty(Keys.PROPERTY_REDIS_DB, String.valueOf(redisCfg.db()));
 
-        if(redisCfg.useInternal()) {
+        // Only start internal Redis if not using custom Redis AND (not in cluster mode OR master/standalone cluster mode)
+        if(redisCfg.useInternal() && (!clusterConfig.enabled() || clusterConfig.mode() == ClusterMode.MASTER || clusterConfig.mode() == ClusterMode.STANDALONE)) {
             redisInstance = new RedisInstance();
         }
 
@@ -117,6 +125,13 @@ public class RedstoneCloud {
         this.keyCache.addKey("cloud", publicKey);
 
         log.info(Translator.translate("cloud.startup"));
+        
+        // Log cluster information
+        if (clusterConfig.enabled()) {
+            log.info("Cluster mode enabled: {} (Node ID: {})", clusterConfig.mode(), clusterConfig.nodeId());
+        } else {
+            log.info("Running in standalone mode");
+        }
 
         Utils.createBaseFolders();
 
@@ -134,9 +149,35 @@ public class RedstoneCloud {
         this.consoleThread = new ConsoleThread();
         this.consoleThread.start();
 
-        this.scheduler.scheduleRepeatingTask(new CheckTemplateTask(), 3000L);
+        // Only schedule template checking task for STANDALONE or MASTER modes
+        if (!clusterConfig.enabled() || clusterConfig.mode() == ClusterMode.MASTER || clusterConfig.mode() == ClusterMode.STANDALONE) {
+            this.scheduler.scheduleRepeatingTask(new CheckTemplateTask(), 3000L);
+        }
+
+        // If SLAVE mode, register with master after initialization
+        if (clusterConfig.enabled() && clusterConfig.mode() == ClusterMode.SLAVE) {
+            this.scheduler.scheduleDelayedTask(() -> registerSlaveWithMaster(), TimeUnit.SECONDS, 2);
+        }
 
         this.pluginManager.enableAllPlugins();
+    }
+
+    /**
+     * Slave node registers itself with the master and announces its templates.
+     */
+    private void registerSlaveWithMaster() {
+        String nodeId = clusterConfig.nodeId();
+        java.util.List<String> templateNames = new java.util.ArrayList<>();
+        
+        for (Template template : this.serverManager.getTemplates().values()) {
+            templateNames.add(template.getName());
+        }
+
+        new de.redstonecloud.api.redis.broker.packet.defaults.cluster.RegisterSlavePacket(nodeId, templateNames)
+                .setTo("cloud")
+                .send();
+        
+        log.info("Registered slave node {} with {} templates to master", nodeId, templateNames.size());
     }
 
     public void stop() {
@@ -151,8 +192,13 @@ public class RedstoneCloud {
         try {
             Thread.sleep(200);
             log.info(Translator.translate("cloud.shutdown.started"));
-            boolean a = this.serverManager.stopAll();
-            if(a) log.info(Translator.translate("cloud.shutdown.servers"));
+            
+            // Only stop servers for STANDALONE or MASTER modes
+            if (!clusterConfig.enabled() || clusterConfig.mode() == ClusterMode.MASTER || clusterConfig.mode() == ClusterMode.STANDALONE) {
+                boolean a = this.serverManager.stopAll();
+                if(a) log.info(Translator.translate("cloud.shutdown.servers"));
+            }
+            
             Thread.sleep(500);
             this.pluginManager.disableAllPlugins();
             log.info(Translator.translate("cloud.shutdown.plugins"));
@@ -160,7 +206,11 @@ public class RedstoneCloud {
             log.info(Translator.translate("cloud.shutdown.complete"));
             this.scheduler.stopScheduler();
 
-            broker.getPool().getResource().flushDB();
+            // Only flush Redis DB in standalone mode or when we own the Redis instance
+            if (!clusterConfig.enabled() || clusterConfig.mode() == ClusterMode.STANDALONE) {
+                broker.getPool().getResource().flushDB();
+            }
+            
             broker.shutdown();
             if(redisInstance != null) redisInstance.shutdown();
         } catch (InterruptedException e) {

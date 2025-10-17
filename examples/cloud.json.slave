@@ -2,11 +2,11 @@
   "redis_port": 6379,
   "redis_bind": "127.0.0.1",
   "redis_db": 0,
-  "custom_redis": false,
+  "custom_redis": true,
   "cluster": {
-    "enabled": false,
-    "mode": "STANDALONE",
-    "node_id": "cloud-1"
+    "enabled": true,
+    "mode": "SLAVE",
+    "node_id": "cloud-slave-1"
   },
   "bridge": {
     "hub_template": "Lobby",

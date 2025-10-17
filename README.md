@@ -10,6 +10,7 @@ RedstoneCloud is a state-of-the-art server management platform designed for Mine
 * Offers a highly flexible server management system to accommodate any software.
 * Includes a simple and intuitive API for ease of use.
 * Utilizes a built-in [Redis](https://redis.io/) instance to synchronize data across multiple servers.
+* **Optional clustering support** with master-slave architecture for distributed deployments (see [CLUSTERING.md](CLUSTERING.md)).
 
 ## ✨ Extending with Plugins
 Want to add more functionality? You can easily develop plugins for RedstoneCloud.
