@@ -1,0 +1,33 @@
+package de.redstonecloud.node.commands;
+
+import de.redstonecloud.api.util.EmptyArrays;
+import de.redstonecloud.node.RedstoneNode;
+
+public class Command {
+
+    public String cmd;
+
+    public int argCount = 0;
+
+    public Command(String cmd) {
+        this.cmd = cmd;
+    }
+
+    protected void onCommand(String[] args) {
+
+    }
+
+    public String getCommand() {
+        return this.cmd;
+    }
+
+
+    public final RedstoneNode getServer() {
+        return RedstoneNode.getInstance();
+    }
+
+    public String[] getArgs() {
+        return EmptyArrays.STRING;
+    }
+
+}

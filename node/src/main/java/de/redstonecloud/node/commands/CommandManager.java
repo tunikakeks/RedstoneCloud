@@ -1,6 +1,6 @@
-package de.redstonecloud.cloud.commands;
+package de.redstonecloud.node.commands;
 
-import de.redstonecloud.cloud.commands.defaults.*;
+import de.redstonecloud.node.commands.defaults.*;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,17 +23,8 @@ public class CommandManager {
     }
 
     public void loadCommands() {
-        addCommand(new ConsoleCommand("console"));
         addCommand(new EndCommand("end"));
-        addCommand(new InfoCommand("info"));
-        addCommand(new StartCommand("start"));
         addCommand(new StopCommand("stop"));
-        addCommand(new ListCommand("list"));
-        addCommand(new KillCommand("kill"));
-        addCommand(new ExecuteCommand("execute"));
-        addCommand(new PlayerCommand("player"));
-        addCommand(new UpdateCommand("update"));
-        addCommand(new NodeCommand("node"));
     }
 
     public void executeCommand(String command, String[] args) {

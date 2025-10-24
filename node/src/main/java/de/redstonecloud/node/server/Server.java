@@ -1,0 +1,277 @@
+package de.redstonecloud.node.server;
+
+import com.google.common.net.HostAndPort;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import de.redstonecloud.api.components.ICloudServer;
+import de.redstonecloud.api.components.ServerStatus;
+import de.redstonecloud.api.redis.broker.packet.defaults.server.RemoveServerPacket;
+import de.redstonecloud.node.RedstoneNode;
+import de.redstonecloud.node.config.CloudConfig;
+import de.redstonecloud.node.events.defaults.ServerExitEvent;
+import de.redstonecloud.node.scheduler.task.Task;
+import de.redstonecloud.node.utils.Translator;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.log4j.Log4j2;
+import org.apache.commons.io.FileUtils;
+import de.redstonecloud.api.redis.cache.Cacheable;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.*;
+
+@Builder
+@Getter
+@Log4j2
+public class Server implements ICloudServer, Cacheable {
+    public Template template;
+    public String name;
+    public int port;
+    public UUID uuid;
+    @Builder.Default
+    public List<String> players = new ArrayList<>();
+    @Builder.Default
+    private ServerStatus status = ServerStatus.NONE;
+    public ServerType type;
+    public long createdAt;
+    @Builder.Default
+    public long lastPlayerUpdate = System.currentTimeMillis();
+    public String directory;
+    @Setter
+    public ServerLogger logger;
+
+    private Process process;
+    private ProcessBuilder processBuilder;
+
+    @Override
+    public String toString() {
+        JsonObject obj = new JsonObject();
+        obj.addProperty("name", name);
+        obj.addProperty("uuid", uuid.toString());
+        obj.addProperty("template", template.getName());
+        obj.addProperty("status", status.name());
+        obj.addProperty("type", type.name());
+        obj.addProperty("port", port);
+        obj.addProperty("proxy", type.isProxy());
+        obj.add("playerUuids", new Gson().fromJson(new Gson().toJson(players), JsonArray.class));
+
+        return obj.toString();
+    }
+
+    public String cacheKey() {
+        return "server:" + name.toUpperCase();
+    }
+
+    @Override
+    public void setStatus(ServerStatus status) {
+        ServerStatus old = this.status;
+        this.status = status;
+        if (old != status) updateCache();
+    }
+
+    @Override
+    public String getName() {
+        return name;
+    }
+
+    public void writeConsole(String command) {
+        if (status != ServerStatus.STARTING && status != ServerStatus.RUNNING && status != ServerStatus.STOPPING)
+            return;
+
+        PrintWriter stdin = new PrintWriter(
+                new BufferedWriter(
+                        new OutputStreamWriter(process.getOutputStream())), true);
+
+        stdin.println(command);
+    }
+
+    /**
+     * SERVER SETUP STUFF
+     */
+
+    public void initName(Integer forceId) {
+        if(forceId != null) {
+            if(ServerManager.getInstance().getServer(template.getName() + "-" + forceId) == null) {
+                name = template.getName() + "-" + forceId;
+                return;
+            } else {
+                log.error("Server with name " + template.getName() + "-" + forceId + " already exists, trying to find a new name...");
+            }
+        }
+
+        int servId = 1;
+        if (ServerManager.getInstance().getServer(template.getName() + "-" + servId) != null) {
+            while (ServerManager.getInstance().getServer(template.getName() + "-" + servId) != null) {
+                servId++;
+            }
+        }
+
+        name = template.getName() + "-" + servId;
+    }
+
+    public void prepare() {
+        if (status.getValue() >= ServerStatus.PREPARED.getValue()) {
+            return;
+        }
+
+        if(name == null) initName(null);
+
+        log.info(Translator.translate("cloud.server.prepare", name));
+
+        if (!template.isStaticServer()) directory = Path.of(RedstoneNode.workingDir + "/tmp/" + name).toString();
+        else directory = Path.of(RedstoneNode.workingDir + "/servers/" + name).toString();
+
+        if (!directory.endsWith("/")) directory += "/";
+
+        new File(directory).mkdir();
+
+        File templateDir = new File(RedstoneNode.workingDir + "/templates/" + template.getName());
+
+        try {
+            FileUtils.copyDirectory(templateDir, new File(directory));
+        } catch (Exception e) {
+            log.error("Failed to copy files from template to server directory for server " + name + " with template " + template.getName() + ".");
+            e.printStackTrace();
+        }
+
+        try {
+            String content = new String(Files.readAllBytes(Paths.get(directory + type.portSettingFile())), StandardCharsets.UTF_8);
+            content = content.replace(type.portSettingPlaceholder(), String.valueOf(port));
+
+            Files.write(Paths.get(directory + type.portSettingFile()), content.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        File rootPluginsDir = new File(RedstoneNode.workingDir + "/plugins/" + type.name());
+        File serverPluginsDir = new File(directory + "/plugins");
+
+        if (rootPluginsDir.exists() && rootPluginsDir.isDirectory()) {
+            try {
+                FileUtils.copyDirectory(rootPluginsDir, serverPluginsDir);
+            } catch (IOException e) {
+                log.error("Failed to copy plugins for server type {}", type.name(), e);
+            }
+        }
+
+        setStatus(ServerStatus.PREPARED);
+    }
+
+    public void onExit() {
+        if (logger != null) logger.cancel();
+
+        log.info(Translator.translate("cloud.server.exited", name));
+
+        process.destroy();
+        status = ServerStatus.STOPPED;
+
+        ServerType[] proxyTypes = Arrays.stream(ServerManager.getInstance().getTypes().values().toArray(new ServerType[0])).filter(t -> t.isProxy()).toArray(ServerType[]::new);
+
+        RemoveServerPacket rsp = new RemoveServerPacket().setServer(this.name);
+
+        for(ServerType type : proxyTypes) {
+            for(Server ser : ServerManager.getInstance().getServersByType(type)) {
+                rsp.setTo(ser.getName().toLowerCase()).send();
+            }
+        }
+
+        //copy log file to logs dir if server is not static
+        if (!getTemplate().isStaticServer() && type.logsPath() != null) {
+            synchronized (this) {
+                try {
+                    if (new File(directory + "/" + type.logsPath()).exists())
+                        Files.copy(Paths.get(directory + "/" + type.logsPath()), Paths.get("./logs/" + name + "_" + System.currentTimeMillis() + ".log"), StandardCopyOption.REPLACE_EXISTING);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            try {
+                FileUtils.deleteDirectory(new File(directory));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        resetCache();
+        ServerManager.getInstance().remove(this);
+        RedstoneNode.getInstance().getEventManager().callEvent(new ServerExitEvent(this));
+    }
+
+    @Override
+    public void start() {
+        if (status.getValue() != ServerStatus.PREPARED.getValue() && status.getValue() >= ServerStatus.STARTING.getValue()) {
+            return;
+        }
+
+        log.info(Translator.translate("cloud.server.starting", name));
+        setStatus(ServerStatus.STARTING);
+
+        processBuilder = new ProcessBuilder(
+                type.startCommand()
+        ).directory(new File(directory));
+
+        //TODO: CHANGE IP IN CLUSTER MODE
+        processBuilder.environment().put("REDIS_IP", CloudConfig.getCfg().get("redis_bind").getAsString());
+        processBuilder.environment().put("REDIS_PORT", String.valueOf(CloudConfig.getCfg().get("redis_port").getAsInt()));
+        processBuilder.environment().put("BRIDGE_CFG", CloudConfig.getCfg().get("bridge").getAsJsonObject().toString());
+
+        this.logger = ServerLogger.builder().server(this).build();
+
+        try {
+            process = processBuilder.start();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        this.logger.start();
+
+        process.onExit().thenRun(this::onExit);
+    }
+
+    public void kill() {
+        this.stop();
+
+        RedstoneNode.getInstance().getScheduler().scheduleDelayedTask(new Task() {
+            @Override
+            protected void onRun(long currentMillis) {
+                if (process.isAlive()) {
+                    process.destroyForcibly();
+                    log.info(name + " didn't stop in time. killing process...");
+                }
+            }
+        }, template.getShutdownTimeMs());
+    }
+
+    @Override
+    public void stop() {
+        log.info(Translator.translate("cloud.server.stopping", name));
+        if (logger != null) logger.cancel();
+        if (status.getValue() != ServerStatus.RUNNING.getValue()) {
+            return;
+        }
+
+        writeConsole("stop");
+        writeConsole("wdend");
+
+        status = ServerStatus.STOPPING;
+        resetCache();
+    }
+
+    @Override
+    public UUID getUUID() {
+        return uuid;
+    }
+
+    @Override
+    public HostAndPort getAddress() {
+        return HostAndPort.fromParts("0.0.0.0", port);
+    }
+}
