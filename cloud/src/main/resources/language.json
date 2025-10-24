@@ -9,5 +9,13 @@
   "cloud.server.exited": "Server {0} exited.",
   "cloud.server.starting": "{0} is starting...",
   "cloud.server.stopping": "{0} is stopping...",
-  "cloud.server.ready": "{0} is ready."
+  "cloud.server.ready": "{0} is ready.",
+  "node.startup": "RedstoneNode is booting up...",
+  "node.startup.redis": "Connecting to Redis Server...",
+  "node.shutdown.started": "RedstoneNode is shutting down...",
+  "node.shutdown.servers": "Stopped all servers",
+  "node.shutdown.complete": "RedstoneNode shut down successfully",
+  "node.auth.success": "Successfully authenticated with master cloud",
+  "node.auth.failed": "Authentication failed: {0}",
+  "node.stop.requested": "Stop command received from master cloud"
 }

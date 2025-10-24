@@ -5,8 +5,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import de.redstonecloud.node.RedstoneNode;
 import de.redstonecloud.api.components.ServerStatus;
-import de.redstonecloud.node.events.defaults.ServerCreateEvent;
-import de.redstonecloud.node.events.defaults.ServerStartEvent;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import lombok.Getter;
 import lombok.extern.java.Log;
@@ -140,11 +138,6 @@ public class ServerManager {
 
         srv.initName(id != null && id != -1 ? id : null);
 
-        ServerCreateEvent res = RedstoneNode.getInstance().getEventManager().callEvent(new ServerCreateEvent(srv));
-        if (res.isCancelled()) {
-            return null;
-        }
-
         srv.prepare();
         add(srv);
         template.setRunningServers(template.getRunningServers() + 1);
@@ -152,7 +145,6 @@ public class ServerManager {
         RedstoneNode cloud = RedstoneNode.getInstance();
         cloud.getScheduler().scheduleDelayedTask(() -> {
             srv.start();
-            RedstoneNode.getInstance().getEventManager().callEvent(new ServerStartEvent(srv));
         }, TimeUnit.SECONDS, 1);
 
         return srv;

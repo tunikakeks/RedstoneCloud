@@ -17,10 +17,5 @@
   "node.shutdown.complete": "RedstoneNode shut down successfully",
   "node.auth.success": "Successfully authenticated with master cloud",
   "node.auth.failed": "Authentication failed: {0}",
-  "node.stop.requested": "Stop command received from master cloud",
-  "node.server.prepare": "Preparing {0}...",
-  "node.server.exited": "Server {0} exited.",
-  "node.server.starting": "{0} is starting...",
-  "node.server.stopping": "{0} is stopping...",
-  "node.server.ready": "{0} is ready."
+  "node.stop.requested": "Stop command received from master cloud"
 }

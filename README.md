@@ -10,6 +10,7 @@ RedstoneCloud is a state-of-the-art server management platform designed for Mine
 * Offers a highly flexible server management system to accommodate any software.
 * Includes a simple and intuitive API for ease of use.
 * Utilizes a built-in [Redis](https://redis.io/) instance to synchronize data across multiple servers.
+* **NEW: Clustering support** - Scale horizontally with multiple slave nodes managed by a single master cloud instance.
 
 ## ✨ Extending with Plugins
 Want to add more functionality? You can easily develop plugins for RedstoneCloud.
@@ -24,6 +25,17 @@ java -jar redstonecloud.jar
 The cloud will generate a basic configuration structure automatically.
 
 Ensure that you have the latest version of our [Bridge](https://github.com/RedstoneCloud/CloudBridge) installed on your server to establish a connection to the cloud.
+
+## 🔗 Clustering (Optional)
+
+RedstoneCloud now supports clustering to scale your infrastructure across multiple nodes:
+
+- **Master-Slave Architecture**: One master cloud instance manages multiple slave node instances
+- **Independent Nodes**: Each node runs its own servers, templates, and types
+- **Secure Authentication**: Each node has a unique name and authentication key
+- **Shared Redis**: All nodes connect to the same Redis instance for communication
+
+See the [Node Module README](node/README.md) for detailed setup instructions.
 
 ## 🙌 How to Contribute
 We encourage contributions to help improve RedstoneCloud! Here's how you can get involved:

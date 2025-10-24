@@ -9,7 +9,6 @@ import de.redstonecloud.api.components.ServerStatus;
 import de.redstonecloud.api.redis.broker.packet.defaults.server.RemoveServerPacket;
 import de.redstonecloud.node.RedstoneNode;
 import de.redstonecloud.node.config.CloudConfig;
-import de.redstonecloud.node.events.defaults.ServerExitEvent;
 import de.redstonecloud.node.scheduler.task.Task;
 import de.redstonecloud.node.utils.Translator;
 import lombok.Builder;
@@ -202,7 +201,6 @@ public class Server implements ICloudServer, Cacheable {
 
         resetCache();
         ServerManager.getInstance().remove(this);
-        RedstoneNode.getInstance().getEventManager().callEvent(new ServerExitEvent(this));
     }
 
     @Override
