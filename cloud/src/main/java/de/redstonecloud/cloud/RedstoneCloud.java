@@ -96,6 +96,7 @@ public class RedstoneCloud {
     protected Console console;
     protected PluginManager pluginManager;
     protected EventManager eventManager;
+    protected de.redstonecloud.cloud.cluster.NodeManager nodeManager;
 
     protected boolean stopped = false;
 
@@ -122,6 +123,7 @@ public class RedstoneCloud {
 
         this.playerManager = new PlayerManager();
         this.serverManager = ServerManager.getInstance();
+        this.nodeManager = de.redstonecloud.cloud.cluster.NodeManager.getInstance();
         this.commandManager = new CommandManager();
         commandManager.loadCommands();
 
