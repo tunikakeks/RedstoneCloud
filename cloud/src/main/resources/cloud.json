@@ -4,6 +4,8 @@
   "redis_db": 0,
   "netty_port": 51123,
   "custom_redis": false,
+  "clustering_enabled": false,
+  "cluster_nodes": [],
   "bridge": {
     "hub_template": "Lobby",
     "hubcommand_desc": "Go to the Lobby",

@@ -3,6 +3,7 @@ package de.redstonecloud.cloud;
 import de.redstonecloud.api.encryption.KeyManager;
 import de.redstonecloud.api.encryption.cache.KeyCache;
 import de.redstonecloud.api.redis.broker.BrokerHelper;
+import de.redstonecloud.cloud.cluster.ClusterManager;
 import de.redstonecloud.cloud.config.CloudConfig;
 import de.redstonecloud.cloud.events.EventManager;
 import de.redstonecloud.cloud.player.PlayerManager;
@@ -108,6 +109,7 @@ public class RedstoneCloud {
     protected Console console;
     protected PluginManager pluginManager;
     protected EventManager eventManager;
+    protected ClusterManager clusterManager;
 
     protected boolean stopped = false;
 
@@ -144,6 +146,9 @@ public class RedstoneCloud {
 
         createBaseFolders();
 
+        this.clusterManager = ClusterManager.getInstance();
+        loadClusterConfig();
+
         this.playerManager = new PlayerManager();
         this.serverManager = ServerManager.getInstance();
         this.commandManager = new CommandManager();
@@ -161,6 +166,23 @@ public class RedstoneCloud {
         this.scheduler.scheduleRepeatingTask(new CheckTemplateTask(), 3000L);
 
         this.pluginManager.enableAllPlugins();
+    }
+
+    private void loadClusterConfig() {
+        if (CloudConfig.getCfg().has("clustering_enabled") && 
+            CloudConfig.getCfg().get("clustering_enabled").getAsBoolean()) {
+            clusterManager.setClusteringEnabled(true);
+            log.info("Clustering enabled");
+
+            if (CloudConfig.getCfg().has("cluster_nodes")) {
+                CloudConfig.getCfg().get("cluster_nodes").getAsJsonArray().forEach(element -> {
+                    var nodeObj = element.getAsJsonObject();
+                    String name = nodeObj.get("name").getAsString();
+                    String authKey = nodeObj.get("auth_key").getAsString();
+                    clusterManager.addNode(name, authKey);
+                });
+            }
+        }
     }
 
     public void stop() {
