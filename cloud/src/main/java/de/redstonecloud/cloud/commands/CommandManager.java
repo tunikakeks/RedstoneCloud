@@ -33,6 +33,7 @@ public class CommandManager {
         addCommand(new ExecuteCommand("execute"));
         addCommand(new PlayerCommand("player"));
         addCommand(new UpdateCommand("update"));
+        addCommand(new NodeCommand("node"));
     }
 
     public void executeCommand(String command, String[] args) {

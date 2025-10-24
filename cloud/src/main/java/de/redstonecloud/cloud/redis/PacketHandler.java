@@ -3,6 +3,9 @@ package de.redstonecloud.cloud.redis;
 import com.google.common.net.HostAndPort;
 import de.redstonecloud.api.components.ServerStatus;
 import de.redstonecloud.api.redis.broker.packet.Packet;
+import de.redstonecloud.api.redis.broker.packet.defaults.cluster.NodeAuthPacket;
+import de.redstonecloud.api.redis.broker.packet.defaults.cluster.NodeAuthResponsePacket;
+import de.redstonecloud.api.redis.broker.packet.defaults.cluster.NodeStopPacket;
 import de.redstonecloud.api.redis.broker.packet.defaults.communication.ClientAuthPacket;
 import de.redstonecloud.api.redis.broker.packet.defaults.player.PlayerConnectPacket;
 import de.redstonecloud.api.redis.broker.packet.defaults.player.PlayerDisconnectPacket;
@@ -12,6 +15,7 @@ import de.redstonecloud.api.redis.broker.packet.defaults.template.GetBestTemplat
 import de.redstonecloud.api.redis.broker.packet.defaults.template.ServerStartedPacket;
 import de.redstonecloud.api.redis.broker.packet.defaults.template.StartServerPacket;
 import de.redstonecloud.cloud.RedstoneCloud;
+import de.redstonecloud.cloud.cluster.NodeManager;
 import de.redstonecloud.cloud.events.defaults.PlayerConnectEvent;
 import de.redstonecloud.cloud.events.defaults.PlayerDisconnectEvent;
 import de.redstonecloud.cloud.events.defaults.PlayerTransferEvent;
@@ -37,6 +41,8 @@ public class PacketHandler {
             case ServerChangeStatusPacket pk -> on(pk);
             case GetBestTemplatePacket pk -> on(pk);
             case StartServerPacket pk -> on(pk);
+            case NodeAuthPacket pk -> on(pk);
+            case NodeStopPacket pk -> on(pk);
             default -> {
             }
         }
@@ -127,5 +133,24 @@ public class PacketHandler {
                 .setTo(packet.getFrom())
                 .setSessionId(packet.getSessionId())
                 .send();
+    }
+
+    private static void on(NodeAuthPacket packet) {
+        NodeManager nodeManager = NodeManager.getInstance();
+        boolean success = nodeManager.authenticate(packet.getNodeName(), packet.getAuthKey());
+        
+        String message = success ? "Node authenticated successfully" : "Authentication failed";
+        
+        new NodeAuthResponsePacket(success, message)
+                .setTo(packet.getFrom())
+                .setSessionId(packet.getSessionId())
+                .send();
+        
+        log.info("Node authentication: {} - {}", packet.getNodeName(), message);
+    }
+
+    private static void on(NodeStopPacket packet) {
+        log.info("Received stop command for node: {}", packet.getNodeName());
+        // The node itself will handle the stop when it receives this packet
     }
 }
